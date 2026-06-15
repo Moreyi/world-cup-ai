@@ -7,6 +7,20 @@ src/adUnlock.js
 ads.txt
 
 data/odds-history.json
+generated/
+.data/
 
 # Server-only deployment artifacts (nginx confs, etc.) — never push to GitHub.
 deploy/
+
+# Personal/local Claude settings (may contain server host/SSH rules) — never push.
+.claude/settings.local.json
+
+# Secrets and server-only env (never commit real values; keep the example)
+.env
+.env.*
+!.env.example
+# Deployed-source housekeeping
+backups/
+*.log
+logs/
