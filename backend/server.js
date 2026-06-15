@@ -6,9 +6,9 @@ import { createProvider } from "./providers/index.js";
 import { createDataSyncService } from "./services/dataSyncService.js";
 import { createMatchesRouter } from "./routes/matches.js";
 import { createPredictionsRouter } from "./routes/predictions.js";
+import { createAnalyticsRouter } from "./routes/analytics.js";
 import {
   corsGuard,
-  createAnalyticsRouter,
   createRateLimiter,
   rejectPublicWrites,
   requireAdminBasicAuth,
@@ -44,7 +44,10 @@ export async function createApp(options = {}) {
   const adminPageAuth = requireAdminBasicAuth({ token: adminToken });
   const matchesRouter = createMatchesRouter({ db });
   const predictionsRouter = createPredictionsRouter({ db, syncService });
-  const analyticsHandler = createAnalyticsRouter();
+  // Storing analytics router (persists events + serves the growth summary).
+  // Replaces the non-storing security.js stub; admin-token gate (above) still
+  // protects /api/admin/worldcup-growth/summary.
+  const analyticsRouter = createAnalyticsRouter();
 
   app.use(["/admin", "/admin/*path"], adminPageAuth);
   app.use(["/api/admin", "/api/admin/*path", "/worldcup-api/admin", "/worldcup-api/admin/*path"], adminLimiter, adminAuth);
@@ -55,7 +58,8 @@ export async function createApp(options = {}) {
     res.json({ ok: true, provider: provider.name, store: db.kind || "database" });
   });
 
-  app.post(["/api/analytics/event", "/worldcup-api/analytics/event"], analyticsHandler);
+  app.use("/api", analyticsRouter);
+  app.use("/worldcup-api", analyticsRouter);
 
   app.use("/api", matchesRouter);
   app.use("/worldcup-api", matchesRouter);
@@ -84,7 +88,11 @@ export async function createApp(options = {}) {
 export async function startServer(options = {}) {
   const port = Number(options.port || process.env.PORT || 3001);
   const runtime = await createApp(options);
-  const server = runtime.app.listen(port);
+  // Bind to loopback in production so nginx is the only public entry (UFW is
+  // defense-in-depth). Dev/tests bind all interfaces; override via HOST.
+  const host =
+    options.host || process.env.HOST || (process.env.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0");
+  const server = runtime.app.listen(port, host);
   const jobs = options.enableCron === false || process.env.ENABLE_CRON === "0" ? [] : startCron(runtime.syncService);
   return { ...runtime, server, jobs, port };
 }
